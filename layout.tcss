@@ -1,0 +1,9 @@
+
+#Home-screen {
+    margin: 1 2;
+}
+
+#commands-box {
+    margin: 2 4;
+    padding: 1 ;
+}
