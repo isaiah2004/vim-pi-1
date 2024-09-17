@@ -1,0 +1,17 @@
+
+#home-screen {
+    margin: 1 2;
+}
+
+#commands-box {
+    margin: 2 4;
+    padding: 1 ;
+}
+
+#left-pane {
+    width: 2fr;
+}
+
+#right-pane {
+    width: 4fr;
+}
