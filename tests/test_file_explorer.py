@@ -60,7 +60,9 @@ async def test_file_loading():
         assert app.screen.name == "FileExplorer"
 
         await pilot.press("tab")
-        for i in range(12):
+        StepsToTestFile = os.listdir(os.getcwd()).index('test.txt')+2
+
+        for i in range(StepsToTestFile):
             await pilot.press("down")
         await pilot.press("enter")
 
@@ -82,8 +84,10 @@ async def test_file_saving():
             f.write(fileContentBeforeEdit)
             f.close()
 
+        t=[i for i in os.listdir(os.getcwd()) if os.path.isdir(os.path.join(os.getcwd(), i))]+[i for i in os.listdir(os.getcwd()) if not os.path.isdir(os.path.join(os.getcwd(), i))]
+        StepsToTestFile = t.index('test.txt')+1
         await pilot.press("tab")
-        for i in range(12):
+        for i in range(StepsToTestFile):
             await pilot.press("down")
         await pilot.press("enter")
 

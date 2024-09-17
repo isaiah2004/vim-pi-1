@@ -24,6 +24,7 @@ HomePageText = r"""
                         |_|    
 """
 
+
 # Home screen
 class Home(Screen):
 
@@ -35,7 +36,6 @@ class Home(Screen):
             yield Static("Vim in Python \n")
             yield Static("ctrl+f - file Explorer")
             yield Static("ctrl+q - quit")
-
 
     pass
 
@@ -75,7 +75,23 @@ class FileExplorer(DirectoryTree):
 
 
 class TextViewer(TextArea):
-    
+    BINDINGS=[
+        ("ctrl+s", "save_current_file()", "Save File"),
+        ("ctrl+w", "close_current_file()", "Close file"),
+        ("ctrl+insert", "copy_selected_text()", "Copy"),
+        ("alt+insert", "paste_selected_text()", "Paste"),
+    ]
+    def action_copy_selected_text(self):
+        textToCopy = self.selected_text
+        pyperclip.copy(textToCopy)
+
+    # default behavior is paste keep here for features like replace paste etc.
+    def action_paste_selected_text(self):
+        log("".join(['--']*30))
+        sel=self.selection
+        log(pyperclip.paste())
+        self.replace(pyperclip.paste(),sel.start,sel.end)
+        pass
     pass
 
 
@@ -83,11 +99,12 @@ class FileExplorerAndEditorScreen(Screen):
     BINDINGS = [
         ("ctrl+f", "toggle_file_explorer()", "Home Screen"),
         ("ctrl+s", "save_current_file()", "Save File"),
-        ("ctrl+w", "close_current_file()", "Close file")
+        ("ctrl+w", "close_current_file()", "Close file"),
     ]
-    def __init__(self, name, CURRENT_DIR,isFileOpen : bool=False):
+
+    def __init__(self, name, CURRENT_DIR, isFileOpen: bool = False):
         self.CURRENT_DIR = CURRENT_DIR
-        self.isFileOpen=isFileOpen
+        self.isFileOpen = isFileOpen
         super().__init__(name=name)
 
     # The composition of the Editing screen
@@ -96,10 +113,13 @@ class FileExplorerAndEditorScreen(Screen):
         yield Footer()
         with Horizontal():
             with VerticalScroll(id="left-pane"):
-                yield FileExplorer(path=self.CURRENT_DIR,id='FileExplorerPanel')
+                yield FileExplorer(path=self.CURRENT_DIR, id="FileExplorerPanel")
             with Container(id="right-pane"):
-                TextViewerObject = TextViewer(id="editor", disabled=True).code_editor(id="editor")
+                TextViewerObject = TextViewer(id="editor", disabled=True).code_editor(
+                    id="editor"
+                )
                 TextViewerObject.load_text("Open file to edit")
+                TextViewerObject.disabled=True
                 yield TextViewerObject
 
     def action_save_current_file(self):
@@ -111,7 +131,7 @@ class FileExplorerAndEditorScreen(Screen):
                     # File exists, write data to the file
                     with open(file_path, "w") as f:
                         f.write(data)
-                    self.isFileOpen=True
+                    self.isFileOpen = True
                     self.notify("File Saved Successfully.")
                 else:
                     self.notify("File does not exist. At least, not anymore.")
@@ -123,12 +143,11 @@ class FileExplorerAndEditorScreen(Screen):
 
     def action_close_current_file(self):
         if self.isFileOpen:
-            self.query_one('#editor',TextViewer).load_text("Open File to edit")
+            self.query_one("#editor", TextViewer).load_text("Open File to edit")
             self.query_one("#editor", TextViewer).disabled = True
         else:
-            self.notify('file not open')
+            self.notify("file not open")
     pass
-
 
 
 # App
@@ -137,21 +156,24 @@ class VimPi(App):
     # Add a binding for the screen switching
     BINDINGS = [
         ("ctrl+f", "toggle_file_explorer()", "File Explorer"),
-        ("ctrl+q", "quit_app()","Quit")
+        ("ctrl+q", "quit_app()", "Quit"),
     ]
+
     def __init__(self, CURRENT_DIR=None):
-        if(CURRENT_DIR==None):
-            self.CURRENT_DIR=os.getcwd()
+        if CURRENT_DIR == None:
+            self.CURRENT_DIR = os.getcwd()
         else:
-            self.CURRENT_DIR=CURRENT_DIR
+            self.CURRENT_DIR = CURRENT_DIR
         super().__init__()
 
     def on_mount(self) -> None:
         # register home screen
         self.install_screen(Home(name="Home"), name="Home")
         self.install_screen(
-            FileExplorerAndEditorScreen(name="FileExplorer", CURRENT_DIR=self.CURRENT_DIR),
-            name="FileExplorer"
+            FileExplorerAndEditorScreen(
+                name="FileExplorer", CURRENT_DIR=self.CURRENT_DIR
+            ),
+            name="FileExplorer",
         )
         # push home screen
         self.push_screen("Home")
@@ -169,11 +191,13 @@ class VimPi(App):
     @on(FileExplorer.TextViewerUpdated)
     def LoadNewFile(self, message: FileExplorer.TextViewerUpdated) -> None:
         self.query_one("#editor", TextViewer).load_text(message.lines)
+        self.query_one(FileExplorerAndEditorScreen).isFileOpen=True
         self.query_one("#editor", TextViewer).disabled = False
         log("The editor has updated")
 
     def action_quit_app(self):
         self.app.exit()
+
 
 # initialise
 if __name__ == "__main__":
