@@ -189,7 +189,7 @@ class VimPi(App):
             self.pop_screen()
 
     @on(FileExplorer.TextViewerUpdated)
-    def LoadNewFile(self, message: FileExplorer.TextViewerUpdated) -> None:
+    def load_new_file(self, message: FileExplorer.TextViewerUpdated) -> None:
         self.query_one("#editor", TextViewer).load_text(message.lines)
         self.query_one(FileExplorerAndEditorScreen).isFileOpen=True
         self.query_one("#editor", TextViewer).disabled = False
