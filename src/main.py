@@ -1,20 +1,23 @@
 import os
+import threading
+import time
 from pathlib import Path
-from typing import Type
 
 from textual.app import App, ComposeResult
-from textual.driver import Driver
+from textual.reactive import reactive
 from textual.screen import Screen
 from textual.message import Message
 
 from textual import on
 from textual import log
 
-from textual.widgets import Header, Footer, Static
+from textual.widgets import Header, Footer, Button
 from textual.widgets import Static, DirectoryTree, TextArea
 
 from textual.containers import Vertical, Horizontal, VerticalScroll, Container
 import pyperclip
+
+from utils.Utils import Drive
 
 HomePageText = r"""
  _____ _                     _
@@ -24,6 +27,7 @@ HomePageText = r"""
                         |_|    
 """
 
+main_path = Path(__file__).resolve()
 
 # Home screen
 class Home(Screen):
@@ -38,6 +42,69 @@ class Home(Screen):
             yield Static("ctrl+q - quit")
 
     pass
+
+
+class DriveSyncScreen(Screen):
+    drive_status = reactive("inactive")
+    sync_thread = None
+
+    def __init__(self, name: str, drive):
+        super().__init__(name=name)
+        self.drive = drive
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Footer()
+
+        with Vertical(id="drive-sync-content"):
+            yield Static(id="status-message")
+            yield Button("Synchronize", id="sync-button", variant="primary")
+            yield Button("Return to Main Menu", id="main-menu-button", variant="primary")
+
+    def on_mount(self):
+        self.update_status()
+
+    def watch_drive_status(self, status: str):
+        self.update_status()
+
+    def update_status(self):
+        status_widget = self.query_one("#status-message", Static)
+        sync_button = self.query_one("#sync-button", Button)
+
+        if self.drive_status == "inactive":
+            status_widget.update("Drive Sync is inactive.")
+            sync_button.disabled = False
+        elif self.drive_status == "activating":
+            status_widget.update("Activating Drive Sync...")
+            sync_button.disabled = True
+        else:  # active
+            status_widget.update("Drive Sync is active.")
+            sync_button.disabled = True
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "sync-button":
+            self.action_enable_drive_sync()
+        elif event.button.id == "main-menu-button":
+            self.app.pop_screen()
+
+    def action_enable_drive_sync(self):
+        if self.drive_status == "inactive":
+            self.drive_status = "activating"
+            self.app.call_after_refresh(self.perform_sync)
+        else:
+            self.notify("Drive Sync is already active or activating.")
+
+    def sync_thead(self):
+        while True:
+            time.sleep(60)
+            self.drive.synchronize(self.app.CURRENT_DIR, self.drive.get_or_create_folder("vim_pi"))
+
+    def perform_sync(self):
+        self.drive = self.app.drive = Drive(credentials_path=main_path.parent)
+        self.drive.synchronize(self.app.CURRENT_DIR, self.drive.get_or_create_folder("vim_pi"))
+        self.sync_thread = threading.Thread(target=self.sync_loop)
+        self.sync_thread.start()
+        self.drive_status = "active"
 
 
 class FileExplorer(DirectoryTree):
@@ -102,9 +169,10 @@ class FileExplorerAndEditorScreen(Screen):
         ("ctrl+w", "close_current_file()", "Close file"),
     ]
 
-    def __init__(self, name, CURRENT_DIR, isFileOpen: bool = False):
+    def __init__(self, name, CURRENT_DIR, isFileOpen: bool = False, drive = None):
         self.CURRENT_DIR = CURRENT_DIR
         self.isFileOpen = isFileOpen
+        self.drive = drive
         super().__init__(name=name)
 
     # The composition of the Editing screen
@@ -132,6 +200,8 @@ class FileExplorerAndEditorScreen(Screen):
                     with open(file_path, "w") as f:
                         f.write(data)
                     self.isFileOpen = True
+                    if self.drive:
+                        self.drive.synchronize(self.app.CURRENT_DIR, self.drive.get_or_create_folder("vim_pi"))
                     self.notify("File Saved Successfully.")
                 else:
                     self.notify("File does not exist. At least, not anymore.")
@@ -156,6 +226,7 @@ class VimPi(App):
     # Add a binding for the screen switching
     BINDINGS = [
         ("ctrl+f", "toggle_file_explorer()", "File Explorer"),
+        ("ctrl+g", "enable_drive_sync()", "Enable Drive"),
         ("ctrl+q", "quit_app()", "Quit"),
     ]
 
@@ -165,16 +236,18 @@ class VimPi(App):
         else:
             self.CURRENT_DIR = CURRENT_DIR
         super().__init__()
+        self.drive = None
 
     def on_mount(self) -> None:
         # register home screen
         self.install_screen(Home(name="Home"), name="Home")
         self.install_screen(
             FileExplorerAndEditorScreen(
-                name="FileExplorer", CURRENT_DIR=self.CURRENT_DIR
+                name="FileExplorer", CURRENT_DIR=self.CURRENT_DIR, drive=self.drive
             ),
             name="FileExplorer",
         )
+        self.install_screen(DriveSyncScreen(name="DriveSyncScreen", drive=self.drive), name="DriveSyncScreen")
         # push home screen
         self.push_screen("Home")
 
@@ -187,6 +260,9 @@ class VimPi(App):
         else:
             log("Revert to Home")
             self.pop_screen()
+
+    def action_enable_drive_sync(self):
+        self.push_screen("DriveSyncScreen")
 
     @on(FileExplorer.TextViewerUpdated)
     def load_new_file(self, message: FileExplorer.TextViewerUpdated) -> None:
