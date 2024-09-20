@@ -5,3 +5,5 @@
 __pycache__
 configs.json
 credentials.json
+app.log
+service-account-keys.json

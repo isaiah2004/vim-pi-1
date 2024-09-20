@@ -13,6 +13,7 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from google.oauth2 import service_account
 
 
 class Utils:
@@ -50,28 +51,52 @@ class Utils:
 
 
 class Drive:
-    def __init__(self, credentials_path:Path = Path(".")):
+    def __init__(self, credentials_path: Path = Path("."), use_service_account: bool = False):
+        self.__service = self.__authenticate(credentials_path, use_service_account)
+
+    def __authenticate(self, credentials_path: Path, use_service_account: bool):
         creds = None
+        scopes = ['https://www.googleapis.com/auth/drive']
 
-        # Checks if authentication token exists, then load it
-        if os.path.exists(credentials_path /'token.pickle'):
-            with open(credentials_path /'token.pickle', 'rb') as token:
-                creds = pickle.load(token)
+        if use_service_account:
+            service_account_file = credentials_path / "service-account-key.json"
+            if not service_account_file.exists():
+                raise FileNotFoundError(f"Service account key file not found: {service_account_file}")
+            creds = service_account.Credentials.from_service_account_file(
+                str(service_account_file), scopes=scopes)
+        else:
+            token_path = credentials_path / 'token.pickle'
+            credentials_file = credentials_path / "credentials.json"
 
-        # Create new authentication token if it does not exist or has expired
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    credentials_path /"credentials.json", ['https://www.googleapis.com/auth/drive']
-                )
-                creds = flow.run_local_server(port=0)
+            if token_path.exists():
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
 
-            with open('token.pickle', 'wb') as token:
-                pickle.dump(creds, token)
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    if not credentials_file.exists():
+                        raise FileNotFoundError(f"Credentials file not found: {credentials_file}")
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        str(credentials_file), scopes
+                    )
+                    creds = flow.run_local_server(port=0)
 
-        self.__service = build('drive', 'v3', credentials=creds)
+                with open(token_path, 'wb') as token:
+                    pickle.dump(creds, token)
+
+        return build('drive', 'v3', credentials=creds)
+
+    def get_service(self):
+        return self.__service
+    
+    def delete_file_or_folder(self, file_id):
+        try:
+            self.__service.files().delete(fileId=file_id).execute()
+            print(f"Deleted file or folder with ID: {file_id}")
+        except Exception as e:
+            print(f"An error occurred while deleting file or folder: {e}")
 
     # List all files inside specified Drive folder
     def list_files(self, folder_id):
