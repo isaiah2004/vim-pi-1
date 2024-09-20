@@ -17,7 +17,7 @@ from textual.widgets import Static, DirectoryTree, TextArea
 from textual.containers import Vertical, Horizontal, VerticalScroll, Container
 import pyperclip
 
-from utils.Utils import Drive
+from .utils.Utils import Drive
 
 HomePageText = r"""
  _____ _                     _
